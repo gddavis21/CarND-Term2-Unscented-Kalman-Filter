@@ -3,26 +3,24 @@
 #include <vector>
 #include "Eigen/Dense"
 
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
-using namespace std;
-
 class Tools {
 public:
-  /**
-  * Constructor.
-  */
-  Tools();
+    /**
+    * Constructor.
+    */
+    Tools();
 
-  /**
-  * Destructor.
-  */
-  virtual ~Tools();
+    /**
+    * Destructor.
+    */
+    virtual ~Tools();
 
-  /**
-  * A helper method to calculate RMSE.
-  */
-  VectorXd CalculateRMSE(const vector<VectorXd> &estimations, const vector<VectorXd> &ground_truth);
+    /**
+    * A helper method to calculate RMSE.
+    */
+    Eigen::VectorXd CalculateRMSE(
+        const std::vector<Eigen::VectorXd> &estimations, 
+        const std::vector<Eigen::VectorXd> &ground_truth);
 
 };
 
