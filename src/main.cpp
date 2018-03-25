@@ -110,12 +110,13 @@ int main()
 
     	  //Push the current estimated x,y positon from the Kalman filter's state vector
 
-    	  VectorXd estimate(4);
+    	  VectorXd ukf_state = ukf.GetCurrentState();
+          VectorXd estimate(4);
 
-    	  double p_x = ukf.x_(0);
-    	  double p_y = ukf.x_(1);
-    	  double v  = ukf.x_(2);
-    	  double yaw = ukf.x_(3);
+    	  double p_x = ukf_state(0);
+    	  double p_y = ukf_state(1);
+    	  double v  = ukf_state(2);
+    	  double yaw = ukf_state(3);
 
     	  double v1 = cos(yaw)*v;
     	  double v2 = sin(yaw)*v;
