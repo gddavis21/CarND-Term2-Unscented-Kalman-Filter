@@ -5,6 +5,7 @@
 using namespace std;
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
+using Eigen::Vector2d;
 
 static const double PI = acos(-1.0);
 static const int STATE_DIM = 5;
@@ -163,9 +164,16 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package)
     time_us_ = meas_package.timestamp_;
 }
 
-VectorXd UKF::GetCurrentState() const
+Vector2d UKF::GetCurrentPosition() const 
 {
-    return state_mean_;
+    return Vector2d(state_mean_(0), state_mean_(1));
+}
+
+Vector2d UKF::GetCurrentVelocity() const 
+{
+    double speed = state_mean_(2);
+    double yaw = state_mean_(3);
+    return Vector2d(speed*cos(yaw), speed*sin(yaw));
 }
 
 // ensure -PI <= state.yaw < PI

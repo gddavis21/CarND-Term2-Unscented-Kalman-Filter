@@ -32,9 +32,9 @@ public:
     // Update state belief, given current radar/lidar measurement
     void ProcessMeasurement(MeasurementPackage meas_package);
 
-    // Get current state belief
-    // (x, y, speed, yaw, yaw-rate)
-    Eigen::VectorXd GetCurrentState() const;
+    // Query current position/velocity
+    Eigen::Vector2d GetCurrentPosition() const;
+    Eigen::Vector2d GetCurrentVelocity() const;
 
 private:
     struct UKF_Prediction 

@@ -8,6 +8,7 @@
 using namespace std;
 using Eigen::VectorXd;
 using Eigen::MatrixXd;
+using Eigen::Vector2d;
 
 // for convenience
 using json = nlohmann::json;
@@ -125,30 +126,18 @@ int main()
     	  ukf.ProcessMeasurement(meas_package);    	  
 
     	  //Push the current estimated x,y positon from the Kalman filter's state vector
+          Vector2d pos = ukf.GetCurrentPosition();
+          Vector2d vel = ukf.GetCurrentVelocity();
 
-    	  VectorXd ukf_state = ukf.GetCurrentState();
           VectorXd estimate(4);
-
-    	  double p_x = ukf_state(0);
-    	  double p_y = ukf_state(1);
-    	  double v  = ukf_state(2);
-    	  double yaw = ukf_state(3);
-
-    	  double v1 = cos(yaw)*v;
-    	  double v2 = sin(yaw)*v;
-
-    	  estimate(0) = p_x;
-    	  estimate(1) = p_y;
-    	  estimate(2) = v1;
-    	  estimate(3) = v2;
-    	  
+          estimate << pos(0), pos(1), vel(0), vel(1);
     	  estimations.push_back(estimate);
 
     	  VectorXd RMSE = tools.CalculateRMSE(estimations, ground_truth);
 
           json msgJson;
-          msgJson["estimate_x"] = p_x;
-          msgJson["estimate_y"] = p_y;
+          msgJson["estimate_x"] = pos(0);
+          msgJson["estimate_y"] = pos(1);
           msgJson["rmse_x"] =  RMSE(0);
           msgJson["rmse_y"] =  RMSE(1);
           msgJson["rmse_vx"] = RMSE(2);
