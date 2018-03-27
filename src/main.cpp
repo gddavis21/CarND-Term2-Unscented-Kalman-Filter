@@ -6,6 +6,8 @@
 #include "tools.h"
 
 using namespace std;
+using Eigen::VectorXd;
+using Eigen::MatrixXd;
 
 // for convenience
 using json = nlohmann::json;
@@ -30,8 +32,22 @@ int main()
 {
   uWS::Hub h;
 
+  // radar sensor uncertainty provided by manufacturer
+  RadarUncertainty radar_noise;
+  radar_noise.std_range = 0.3;
+  radar_noise.std_heading = 0.03;
+  radar_noise.std_range_rate = 0.3;
+
+  // lidar sensor uncertainty provided by manufacturer
+  LidarUncertainty lidar_noise;
+  lidar_noise.std_x = 0.15;
+  lidar_noise.std_y = 0.15;
+
+  bool use_radar = true;
+  bool use_lidar = true;
+
   // Create a Kalman Filter instance
-  UKF ukf;
+  UKF ukf(radar_noise, lidar_noise, use_radar, use_lidar);
 
   // used to compute the RMSE later
   Tools tools;

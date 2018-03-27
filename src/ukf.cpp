@@ -23,17 +23,17 @@ namespace
     }
 }
 
-/**
- * Initializes Unscented Kalman filter
- * This is scaffolding, do not modify
- */
-UKF::UKF() 
+UKF::UKF(
+    RadarUncertainty radar_noise,
+    LidarUncertainty lidar_noise,
+    bool use_radar,
+    bool use_lidar) 
 {
     // if this is false, laser measurements will be ignored (except during init)
-    use_laser_ = true;
+    use_laser_ = use_lidar;
 
     // if this is false, radar measurements will be ignored (except during init)
-    use_radar_ = true;
+    use_radar_ = use_radar;
 
     // Process noise standard deviation longitudinal acceleration in m/s^2
     std_a_ = 0.5;  // initial guess
@@ -41,43 +41,24 @@ UKF::UKF()
     // Process noise standard deviation yaw acceleration in rad/s^2
     std_yawdd_ = 0.25*PI;  // initial guess
 
-    //DO NOT MODIFY measurement noise values below these are provided by the sensor manufacturer.
-    // Laser measurement noise standard deviation position1 in m
-    std_laspx_ = 0.15;
-
-    // Laser measurement noise standard deviation position2 in m
-    std_laspy_ = 0.15;
-
-    // Radar measurement noise standard deviation radius in m
-    std_radr_ = 0.3;
-
-    // Radar measurement noise standard deviation angle in rad
-    std_radphi_ = 0.03;
-
-    // Radar measurement noise standard deviation radius change in m/s
-    std_radrd_ = 0.3;
-    //DO NOT MODIFY measurement noise values above these are provided by the sensor manufacturer.
-
-    /**
-    TODO:
-
-    Complete the initialization. See ukf.h for other member properties.
-
-    Hint: one or more values initialized above might be wildly off...
-    */
-
-    lambda_ = 3.0 - AUG_STATE_DIM;
-    
-    weights_ = VectorXd(NUM_SIGMA_PTS);
-    weights_(0) = lambda_ / (lambda_ + AUG_STATE_DIM);
-    for (int i=1; i < NUM_SIGMA_PTS; i++) {
-        weights_(i) = 0.5 / (lambda_ + AUG_STATE_DIM);
-    }
-
     proc_noise_covar_ = MatrixXd(2,2);
     proc_noise_covar_ << 
         std_a_*std_a_, 0, 
         0, std_yawdd_*std_yawdd_;
+
+    // Laser measurement noise standard deviation
+    std_laspx_ = lidar_noise.std_x;  // in m
+    std_laspy_ = lidar_noise.std_y;  // in m
+
+    laser_noise_covar_ = MatrixXd(2,2);
+    laser_noise_covar_ <<
+        std_laspx_*std_laspx_, 0,
+        0, std_laspy_*std_laspy_;
+
+    // Radar measurement noise standard deviation
+    std_radr_   = radar_noise.std_range;      // in m
+    std_radphi_ = radar_noise.std_heading;    // in radians
+    std_radrd_  = radar_noise.std_range_rate; // in m/s
 
     radar_noise_covar_ = MatrixXd(3,3);
     radar_noise_covar_ <<
@@ -85,10 +66,15 @@ UKF::UKF()
         0, std_radphi_*std_radphi_, 0,
         0, 0, std_radrd_*std_radrd_;
 
-    laser_noise_covar_ = MatrixXd(2,2);
-    laser_noise_covar_ <<
-        std_laspx_*std_laspx_, 0,
-        0, std_laspy_*std_laspy_;
+    // sigma point spread parameter
+    lambda_ = 3.0 - AUG_STATE_DIM;
+    
+    // sigma point weights
+    weights_ = VectorXd(NUM_SIGMA_PTS);
+    weights_(0) = lambda_ / (lambda_ + AUG_STATE_DIM);
+    for (int i=1; i < NUM_SIGMA_PTS; i++) {
+        weights_(i) = 0.5 / (lambda_ + AUG_STATE_DIM);
+    }
 
     NIS_radar_ = NIS_lidar_ = 0.0;
 }
@@ -104,7 +90,41 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package)
     // initialize on 1st measurement
     if (!is_initialized_) 
     {
-        InitializeState(meas_package);
+        // extract initial position from lidar/radar measurement
+        VectorXd actual_meas = meas_package.raw_measurements_;
+        double x, y;
+
+        switch (meas_package.sensor_type_) 
+        {
+            case MeasurementPackage::LASER:
+                // Laser measurement already in cartesian coordinates
+                x = actual_meas(0);
+                y = actual_meas(1);
+                break;
+
+            case MeasurementPackage::RADAR:
+            {
+                // Convert radar measurement from polar to cartesian coordinates
+                double range = actual_meas(0);
+                double heading = actual_meas(1);
+                x = range*cos(heading);
+                y = range*sin(heading);
+                break;
+            }
+
+            default:
+                throw std::invalid_argument("unrecognized sensor type");
+        }
+
+        const double INITIAL_SPEED = 6;
+        const double INITIAL_VARIANCE = 0.05;
+
+        state_mean_ = VectorXd(STATE_DIM);
+        state_mean_ << x, y, INITIAL_SPEED, 0, 0;
+
+        state_covariance_ = MatrixXd::Identity(STATE_DIM,STATE_DIM) * INITIAL_VARIANCE;
+
+        time_us_ = meas_package.timestamp_;
         is_initialized_ = true;
         return;
     }
@@ -143,47 +163,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package)
     time_us_ = meas_package.timestamp_;
 }
 
-void UKF::InitializeState(MeasurementPackage meas_package)
-{
-    // extract initial position from lidar/radar measurement
-    VectorXd actual_meas = meas_package.raw_measurements_;
-    double x, y;
-
-    switch (meas_package.sensor_type_) 
-    {
-        case MeasurementPackage::LASER:
-            // Laser measurement already in cartesian coordinates
-            x = actual_meas(0);
-            y = actual_meas(1);
-            break;
-
-        case MeasurementPackage::RADAR:
-        {
-            // Convert radar measurement from polar to cartesian coordinates
-            double range = actual_meas(0);
-            double heading = actual_meas(1);
-            x = range*cos(heading);
-            y = range*sin(heading);
-            break;
-        }
-
-        default:
-            throw std::invalid_argument("unrecognized sensor type");
-    }
-
-    state_mean_ = VectorXd(STATE_DIM); // TODO: reasonable initial velocity
-    state_mean_ << x, y, 6, 0, 0;
-
-    state_covariance_ = MatrixXd::Identity(STATE_DIM,STATE_DIM) * 0.05;
-
-    time_us_ = meas_package.timestamp_;
-}
-
 VectorXd UKF::GetCurrentState() const
 {
     return state_mean_;
 }
 
+// ensure -PI <= state.yaw < PI
 VectorXd UKF::NormalizeState(const VectorXd &state)
 {
     VectorXd n = state;
@@ -191,6 +176,7 @@ VectorXd UKF::NormalizeState(const VectorXd &state)
     return n;
 }
 
+// ensure -PI <= radar.heading < PI
 VectorXd UKF::NormalizeRadar(const VectorXd &radar)
 {
     VectorXd n = radar;
@@ -198,6 +184,7 @@ VectorXd UKF::NormalizeRadar(const VectorXd &radar)
     return n;
 }
 
+// compute UKF augmented sigma points
 MatrixXd UKF::AugmentedSigmaPoints() const
 {
     // augmented state mean
@@ -224,7 +211,8 @@ MatrixXd UKF::AugmentedSigmaPoints() const
     return sigma_pts;
 }
 
-VectorXd UKF::StateTransition(const VectorXd &prior, double dt) 
+// predict state mean, given prior (augmented) state mean and time offset
+VectorXd UKF::StateTransition(const VectorXd &prior, double delta_t) 
 {
     double x = prior(0);
     double y = prior(1);
@@ -241,26 +229,27 @@ VectorXd UKF::StateTransition(const VectorXd &prior, double dt)
     double yaw_rate_pred = yaw_rate;
 
     if (fabs(yaw_rate) < 0.001) {
-        x_pred += s*cos(yaw)*dt;
-        y_pred += s*sin(yaw)*dt;
+        x_pred += s*cos(yaw)*delta_t;
+        y_pred += s*sin(yaw)*delta_t;
     }
     else {
-        x_pred += (s/yaw_rate)*(sin(yaw + yaw_rate*dt) - sin(yaw));
-        y_pred += (s/yaw_rate)*(cos(yaw) - cos(yaw + yaw_rate*dt));
-        yaw_pred += yaw_rate*dt;
+        x_pred += (s/yaw_rate)*(sin(yaw + yaw_rate*delta_t) - sin(yaw));
+        y_pred += (s/yaw_rate)*(cos(yaw) - cos(yaw + yaw_rate*delta_t));
+        yaw_pred += yaw_rate*delta_t;
     }
 
-    x_pred += 0.5*dt*dt*cos(yaw)*noise_lon;
-    y_pred += 0.5*dt*dt*sin(yaw)*noise_lon;
-    s_pred += dt*noise_lon;
-    yaw_pred += 0.5*dt*dt*noise_yaw;
-    yaw_rate_pred += dt*noise_yaw;
+    x_pred += 0.5*delta_t*delta_t*cos(yaw)*noise_lon;
+    y_pred += 0.5*delta_t*delta_t*sin(yaw)*noise_lon;
+    s_pred += delta_t*noise_lon;
+    yaw_pred += 0.5*delta_t*delta_t*noise_yaw;
+    yaw_rate_pred += delta_t*noise_yaw;
 
     VectorXd pred(STATE_DIM);
     pred << x_pred, y_pred, s_pred, yaw_pred, yaw_rate_pred;
     return pred;
 }
 
+// predict sigma points, state mean & state covariance
 UKF::UKF_Prediction UKF::PredictState(double delta_t) const
 {
     MatrixXd aug_sigma_pts = AugmentedSigmaPoints();
@@ -283,6 +272,7 @@ UKF::UKF_Prediction UKF::PredictState(double delta_t) const
     return pred_state;
 }
 
+// compute radar measurement from given state vector
 VectorXd UKF::StateToRadar(const VectorXd &state)
 {
     double x = state(0);
@@ -300,6 +290,7 @@ VectorXd UKF::StateToRadar(const VectorXd &state)
     return radar;
 }
 
+// convert predicted state to predicted radar measurement
 UKF::UKF_Prediction UKF::PredictRadarMeasurement(const UKF_Prediction &pred_state) const
 {
     UKF_Prediction pred_meas;
@@ -320,6 +311,7 @@ UKF::UKF_Prediction UKF::PredictRadarMeasurement(const UKF_Prediction &pred_stat
     return pred_meas;
 }
 
+// update state belief, given predicted state and actual radar measurement
 void UKF::UpdateRadar(const UKF_Prediction &pred_state, const VectorXd &actual_meas)
 {
     // predict measurement from predicted state
@@ -344,9 +336,11 @@ void UKF::UpdateRadar(const UKF_Prediction &pred_state, const VectorXd &actual_m
     state_mean_ = pred_state.mean + K*y;
     state_covariance_ = pred_state.covariance - K*S*K.transpose();
 
+    // normalized innovation squared metric
     NIS_radar_ = y.transpose() * S_inv * y;
 }
 
+// compute lidar measurement from given state vector
 VectorXd UKF::StateToLidar(const VectorXd &state)
 {
     VectorXd lidar(LIDAR_DIM);
@@ -354,6 +348,7 @@ VectorXd UKF::StateToLidar(const VectorXd &state)
     return lidar;
 }
 
+// convert predicted state to predicted lidar measurement
 UKF::UKF_Prediction UKF::PredictLidarMeasurement(const UKF_Prediction &pred_state) const
 {
     UKF_Prediction pred_meas;
@@ -374,6 +369,7 @@ UKF::UKF_Prediction UKF::PredictLidarMeasurement(const UKF_Prediction &pred_stat
     return pred_meas;
 }
 
+// update state belief, given predicted state and actual lidar measurement
 void UKF::UpdateLidar(const UKF_Prediction &pred_state, const VectorXd &actual_meas)
 {
     // predict measurement from predicted state
@@ -398,5 +394,6 @@ void UKF::UpdateLidar(const UKF_Prediction &pred_state, const VectorXd &actual_m
     state_mean_ = pred_state.mean + K*y;
     state_covariance_ = pred_state.covariance - K*S*K.transpose();
 
+    // normalized innovation squared metric
     NIS_lidar_ = y.transpose() * S_inv * y;
 }

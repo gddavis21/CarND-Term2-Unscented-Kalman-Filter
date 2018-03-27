@@ -7,11 +7,55 @@
 #include <string>
 #include <fstream>
 
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
+struct RadarUncertainty {
+    double std_range;      // Radar measurement noise standard deviation radius in m
+    double std_heading;    // Radar measurement noise standard deviation angle in rad
+    double std_range_rate; // Radar measurement noise standard deviation radius change in m/s
+};
 
-class UKF {
+struct LidarUncertainty {
+    double std_x;  // Laser measurement noise standard deviation position1 in m
+    double std_y;  // Laser measurement noise standard deviation position2 in m
+};
+
+class UKF 
+{
 public:
+    UKF(
+        RadarUncertainty, 
+        LidarUncertainty, 
+        bool use_radar, 
+        bool use_lidar);
+
+    virtual ~UKF();
+
+    // Update state belief, given current radar/lidar measurement
+    void ProcessMeasurement(MeasurementPackage meas_package);
+
+    // Get current state belief
+    // (x, y, speed, yaw, yaw-rate)
+    Eigen::VectorXd GetCurrentState() const;
+
+private:
+    struct UKF_Prediction 
+    {
+        Eigen::MatrixXd sigma_pts;
+        Eigen::VectorXd mean;
+        Eigen::MatrixXd covariance;
+    };
+
+    Eigen::MatrixXd AugmentedSigmaPoints() const;
+    UKF_Prediction PredictState(double delta_t) const;
+    UKF_Prediction PredictRadarMeasurement(const UKF_Prediction &pred_state) const;
+    UKF_Prediction PredictLidarMeasurement(const UKF_Prediction &pred_state) const;
+    void UpdateRadar(const UKF_Prediction &pred_state, const Eigen::VectorXd &actual_meas);
+    void UpdateLidar(const UKF_Prediction &pred_state, const Eigen::VectorXd &actual_meas);
+
+    static Eigen::VectorXd StateTransition(const Eigen::VectorXd &prior, double delta_t);
+    static Eigen::VectorXd StateToRadar(const Eigen::VectorXd &state);
+    static Eigen::VectorXd StateToLidar(const Eigen::VectorXd &state);
+    static Eigen::VectorXd NormalizeState(const Eigen::VectorXd &state);
+    static Eigen::VectorXd NormalizeRadar(const Eigen::VectorXd &radar);
 
     ///* initially set to false, set to true in first call of ProcessMeasurement
     bool is_initialized_;
@@ -46,77 +90,11 @@ public:
     ///* Radar measurement noise standard deviation radius change in m/s
     double std_radrd_ ;
 
-  ///* Weights of sigma points
-  VectorXd weights_;
+    ///* Sigma point spreading parameter
+    double lambda_;
 
-//   ///* State dimension
-//   int n_x_;
-
-//   ///* Augmented state dimension
-//   int n_aug_;
-
-  ///* Sigma point spreading parameter
-  double lambda_;
-
-
-  /**
-   * Constructor
-   */
-  UKF();
-
-  /**
-   * Destructor
-   */
-  virtual ~UKF();
-
-  /**
-   * ProcessMeasurement
-   * @param meas_package The latest measurement data of either radar or laser
-   */
-  void ProcessMeasurement(MeasurementPackage meas_package);
-
-//   /**
-//    * Prediction Predicts sigma points, the state, and the state covariance
-//    * matrix
-//    * @param delta_t Time between k and k+1 in s
-//    */
-//   void Prediction(double delta_t);
-
-//   /**
-//    * Updates the state and the state covariance matrix using a laser measurement
-//    * @param meas_package The measurement at k+1
-//    */
-//   void UpdateLidar(MeasurementPackage meas_package);
-
-//   /**
-//    * Updates the state and the state covariance matrix using a radar measurement
-//    * @param meas_package The measurement at k+1
-//    */
-//   void UpdateRadar(MeasurementPackage meas_package);
-
-    Eigen::VectorXd GetCurrentState() const;
-
-private:
-    struct UKF_Prediction 
-    {
-        Eigen::MatrixXd sigma_pts;
-        Eigen::VectorXd mean;
-        Eigen::MatrixXd covariance;
-    };
-
-    void InitializeState(MeasurementPackage);
-    Eigen::MatrixXd AugmentedSigmaPoints() const;
-    UKF_Prediction PredictState(double delta_t) const;
-    UKF_Prediction PredictRadarMeasurement(const UKF_Prediction &pred_state) const;
-    UKF_Prediction PredictLidarMeasurement(const UKF_Prediction &pred_state) const;
-    void UpdateRadar(const UKF_Prediction &pred_state, const VectorXd &actual_meas);
-    void UpdateLidar(const UKF_Prediction &pred_state, const VectorXd &actual_meas);
-
-    static Eigen::VectorXd StateTransition(const Eigen::VectorXd &prior, double delta_t);
-    static Eigen::VectorXd StateToRadar(const Eigen::VectorXd &state);
-    static Eigen::VectorXd StateToLidar(const Eigen::VectorXd &state);
-    static Eigen::VectorXd NormalizeState(const Eigen::VectorXd &state);
-    static Eigen::VectorXd NormalizeRadar(const Eigen::VectorXd &radar);
+    ///* Weights of sigma points
+    Eigen::VectorXd weights_;
 
     // state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
     Eigen::VectorXd state_mean_;
@@ -130,6 +108,7 @@ private:
     // radar/lidar measurement noise covariance matrices
     Eigen::MatrixXd radar_noise_covar_, laser_noise_covar_;
 
+    // radar/lidar Normalized Innovation Squared metrics
     double NIS_radar_, NIS_lidar_;
 };
 
