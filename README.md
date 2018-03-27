@@ -30,7 +30,7 @@ Once the install for uWebSocketIO is complete, the main program can be built and
   + Construction:
     - User supplies radar/lidar sensor uncertainty values.
     - User can also configure UKF instance to ignore radar or lidar measurements.
-  + Method __ProcessMeasuberement()__ receives Lidar/Radar measurements and updates estimated position/velocity state.
+  + Method __ProcessMeasurement()__ receives Lidar/Radar measurements and updates estimated position/velocity.
     - Initializes state estimate on first measurement.
     - For subsequent measurements, updates state estimate using Unscented Kalman Filter algorithm.
     - New state is predicted from prior state and time delta since last measurement.
