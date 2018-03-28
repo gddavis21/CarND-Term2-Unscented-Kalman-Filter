@@ -289,7 +289,12 @@ VectorXd UKF::StateToRadar(const VectorXd &state)
     double yaw = state(3);
 
     double range = sqrt(x*x + y*y);
-    // TODO: check for range ~ 0 (prevent divide-by-zero)
+    
+    // prevent divide-by-zero
+    if (range < 0.001) {
+        return VectorXd::Zero(3);
+    }
+    
     double heading = atan2(y,x);
     double range_rate = (x*s*cos(yaw) + y*s*sin(yaw)) / range;
 
